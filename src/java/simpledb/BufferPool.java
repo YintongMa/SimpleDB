@@ -2,7 +2,11 @@ package simpledb;
 
 import java.io.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -26,6 +30,9 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    public Map<PageId,Page> pageIdToPage;
+    int numPages;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -33,6 +40,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.numPages = numPages;
+        this.pageIdToPage = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {
@@ -64,10 +73,22 @@ public class BufferPool {
      * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+        Page page;
+        if(pageIdToPage.containsKey(pid)){
+            page = pageIdToPage.get(pid);
+        }else{
+            if(pageIdToPage.size() == numPages){
+                throw new DbException("BufferPool is out of space");
+            }else {
+                DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                page = file.readPage(pid);
+                pageIdToPage.put(pid, page);
+            }
+        }
+        return page;
     }
 
     /**
