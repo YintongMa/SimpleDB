@@ -1,15 +1,11 @@
-simple-db
+SimpleDB
 =========
 
-Code for all 6.830 labs will be available in this repo. Once you have set up your class repo, you pull lab code from here.
+Reinvent the wheels of Database Systems for fun! : ) 
 
-Directions for Repo Setup
--------------------------
+Stage 1 : Java Prototype from MIT 6.830 [here](https://github.com/MIT-DB-Class/course-info-2018)
 
-Directions can be [here](https://github.com/MIT-DB-Class/course-info-2018)
+Stage 2 : C++ Prototype from CMU bustub [here](https://github.com/cmu-db/bustub)
 
-Lab Submission
------
-
-Instructions for labs (including how to submit answers) are [here](https://github.com/MIT-DB-Class/course-info-2018)
+Stage 3 : To be continued...
 
