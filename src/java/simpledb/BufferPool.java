@@ -31,6 +31,9 @@ public class BufferPool {
     public static final int DEFAULT_PAGES = 50;
 
     public Map<PageId,Page> pageIdToPage;
+
+    //grain granularity lock
+    public ReentrantReadWriteLock poolLock = new ReentrantReadWriteLock();
     int numPages;
 
     /**
@@ -76,6 +79,7 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
+        poolLock.writeLock().lock();
         Page page;
         if(pageIdToPage.containsKey(pid)){
             page = pageIdToPage.get(pid);
@@ -88,6 +92,7 @@ public class BufferPool {
                 pageIdToPage.put(pid, page);
             }
         }
+        poolLock.writeLock().unlock();
         return page;
     }
 
@@ -173,6 +178,7 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        Page page = getPage(tid,t.getRecordId().pageId,null);
     }
 
     /**

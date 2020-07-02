@@ -225,7 +225,9 @@ public class HeapFile implements DbFile {
         @Override
         public void close() {
             try {
-                fis.close();
+                if(fis != null){
+                    fis.close();
+                }
                 heapPage = null;
                 tupleIterator = null;
                 hasNext = false;

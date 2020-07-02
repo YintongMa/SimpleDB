@@ -24,6 +24,7 @@ public class TestUtil {
      *   TupleIterator
      */
     public static TupleIterator createTupleList(int width, int[] tupdata) {
+        //System.out.println("createTupleList: "+width+","+tupdata);
         int i = 0;
         ArrayList<Tuple> tuplist = new ArrayList<Tuple>();
         while (i < tupdata.length) {
@@ -31,6 +32,7 @@ public class TestUtil {
             for (int j = 0; j < width; ++j)
                 tup.setField(j, getField(tupdata[i++]));
             tuplist.add(tup);
+           // System.out.println("createTupleList add: "+tup);
         }
 
         TupleIterator result = new TupleIterator(Utility.getTupleDesc(width), tuplist);
@@ -132,11 +134,13 @@ public class TestUtil {
         boolean matched = false;
         while (expected.hasNext()) {
             Tuple expectedTup = expected.next();
+            //System.out.println("expectedTup: "+expectedTup);
             matched = false;
             actual.rewind();
 
             while (actual.hasNext()) {
                 Tuple next = actual.next();
+                //System.out.println("actualTup: "+next);
                 if (compareTuples(expectedTup, next)) {
                     matched = true;
                     break;

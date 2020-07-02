@@ -74,6 +74,12 @@ public class Tuple implements Serializable {
         fields.set(i,f);
     }
 
+    public Tuple setFields(List<Field> fields) {
+        // some code goes here
+        this.fields = fields;
+        return this;
+    }
+
     /**
      * @return the value of the ith field, or null if it has not been set.
      *

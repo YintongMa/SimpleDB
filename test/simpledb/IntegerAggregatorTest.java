@@ -119,10 +119,14 @@ public class IntegerAggregatorTest extends SimpleDbTestBase {
 
     OpIterator it;
     for (int[] step : avg) {
-      agg.mergeTupleIntoGroup(scan1.next());
+      //System.out.println("begin loop");
+      Tuple tuple = scan1.next();
+      //System.out.println("input tuple: "+tuple);
+      agg.mergeTupleIntoGroup(tuple);
       it = agg.iterator();
       it.open();
       TestUtil.matchAllTuples(TestUtil.createTupleList(width1, step), it);
+      //System.out.println("end loop");
     }
   }
 
