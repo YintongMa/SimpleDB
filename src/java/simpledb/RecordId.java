@@ -44,6 +44,14 @@ public class RecordId implements Serializable {
         return pageId;
     }
 
+    public void setPageId(PageId pageId) {
+        this.pageId = pageId;
+    }
+
+    public void setTupleno(int tupleno) {
+        this.tupleno = tupleno;
+    }
+
     /**
      * Two RecordId objects are considered equal if they represent the same
      * tuple.

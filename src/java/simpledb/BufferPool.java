@@ -2,6 +2,7 @@ package simpledb;
 
 import java.io.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,12 +86,14 @@ public class BufferPool {
             page = pageIdToPage.get(pid);
         }else{
             if(pageIdToPage.size() == numPages){
-                throw new DbException("BufferPool is out of space");
-            }else {
-                DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
-                page = file.readPage(pid);
-                pageIdToPage.put(pid, page);
+                evictPage();
+                //throw new DbException("BufferPool is out of space");
             }
+            DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            page = file.readPage(pid);
+            page.markDirty(false,tid);
+            //System.out.println("pageIdToPage.put:"+pid+","+page);
+            pageIdToPage.put(pid, page);
         }
         poolLock.writeLock().unlock();
         return page;
@@ -159,6 +162,15 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        ArrayList<Page> modifiedPages = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid,t);
+        for(Page page:modifiedPages){
+            if(pageIdToPage.size() == numPages){
+                throw new DbException("BufferPool is out of space");
+            }else {
+                //System.out.println("bufferpool insertTuple :"+page.getId()+","+pageIdToPage.size());
+                pageIdToPage.put(page.getId(),page);
+            }
+        }
     }
 
     /**
@@ -174,11 +186,13 @@ public class BufferPool {
      * @param tid the transaction deleting the tuple.
      * @param t the tuple to delete
      */
+    //TODO add locking strategy
     public  void deleteTuple(TransactionId tid, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
-        Page page = getPage(tid,t.getRecordId().pageId,null);
+        Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId()).deleteTuple(tid,t);
+
     }
 
     /**
@@ -203,6 +217,9 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        if(pid != null){
+            pageIdToPage.remove(pid);
+        }
     }
 
     /**
@@ -212,6 +229,8 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(pageIdToPage.get(pid));
+        pageIdToPage.get(pid).markDirty(false,null);
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -219,6 +238,12 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for(Map.Entry<PageId,Page> entry:pageIdToPage.entrySet()){
+            if(entry.getValue().isDirty() == tid){
+                flushPage(entry.getKey());
+            }
+        }
+
     }
 
     /**
@@ -228,6 +253,28 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        //TODO LRU or some cache strategy
+        PageId pageId = null;
+        for(Map.Entry<PageId,Page> entry : pageIdToPage.entrySet()){
+            //System.out.println("evictPage pageIdToPage isDirty:"+entry.getValue().isDirty());
+            pageId = entry.getKey();
+            if(entry.getValue().isDirty() != null){
+                //System.out.println("evictPage pageIdToPage isDirty:"+entry);
+                try {
+                    flushPage(pageId);
+                    break;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }else {
+                break;
+            }
+        }
+        if(pageId != null){
+            pageIdToPage.remove(pageId);
+            System.out.println("evictPage pageIdToPage size:"+pageIdToPage.size());
+        }
+
     }
 
 }

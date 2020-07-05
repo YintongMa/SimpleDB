@@ -44,6 +44,7 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
     	        p.insertTuple(t);
     			dirtypages.add(p);
     		}
+    		//System.out.println("HeapFileDuplicates insertTuple :"+dirtypages.size());
     		return dirtypages;
     	}
     }
@@ -124,9 +125,10 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
     	// there should now be 10 tuples (on 10 different pages) in the buffer pool
     	DbFileIterator it = hfd.iterator(tid);
     	it.open();
-    	
+		//System.out.println("handleManyDirtyPages :"+hfd.numPages());
     	int count = 0;
     	while(it.hasNext()) {
+			//System.out.println("handleManyDirtyPages :"+count);
     		it.next();
     		count++;
     	}

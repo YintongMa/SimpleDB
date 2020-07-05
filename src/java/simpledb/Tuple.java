@@ -69,9 +69,10 @@ public class Tuple implements Serializable {
      * @param f
      *            new value for the field.
      */
-    public void setField(int i, Field f) {
+    public Tuple setField(int i, Field f) {
         // some code goes here
         fields.set(i,f);
+        return this;
     }
 
     public Tuple setFields(List<Field> fields) {
