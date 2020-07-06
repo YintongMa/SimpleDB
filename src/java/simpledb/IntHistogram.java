@@ -1,8 +1,18 @@
 package simpledb;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /** A class to represent a fixed-width histogram over a single integer-based field.
  */
-public class IntHistogram {
+public class IntHistogram implements Histogram{
+
+    int buckets;
+    int min;
+    int max;
+    int interval;
+    int cnt = 0;
+    Map<Integer,Integer> hist = new HashMap<>();
 
     /**
      * Create a new IntHistogram.
@@ -22,14 +32,25 @@ public class IntHistogram {
      */
     public IntHistogram(int buckets, int min, int max) {
     	// some code goes here
+        this.buckets = buckets;
+        this.min = min;
+        this.max = max;
+        this.interval = (int) Math.ceil((max-min+1)*1.0/buckets);
+        //System.out.println("IntHistogram :"+buckets+","+min+","+max+","+interval);
+        for(int i=0;i<buckets;i++){
+            hist.put(i,0);
+        }
     }
 
     /**
      * Add a value to the set of values that you are keeping a histogram of.
      * @param v Value to add to the histogram
      */
-    public void addValue(int v) {
+    public void addValue(Object v) {
     	// some code goes here
+        int index = getBucketIndex((Integer) v);
+        hist.put(index,hist.get(index)+1);
+        cnt ++;
     }
 
     /**
@@ -42,10 +63,72 @@ public class IntHistogram {
      * @param v Value
      * @return Predicted selectivity of this particular operator and value
      */
-    public double estimateSelectivity(Predicate.Op op, int v) {
+    public double estimateSelectivity(Predicate.Op op, Object v) {
 
     	// some code goes here
-        return -1.0;
+        int val = (int) v;
+        int index = getBucketIndex(val);
+        double total;
+        switch (op){
+            case EQUALS:
+                if(val<min || val>max){
+                    return 0.0;
+                }
+                return hist.get(index)*1.0/interval/cnt;
+            case LESS_THAN:
+                if(val<min){
+                    return 0.0;
+                }
+                if(val>max){
+                    return 1.0;
+                }
+                //System.out.println("LESS_THAN: "+hist+","+hist.get(index)+","+v);
+                total = (getBucketOffset(val))*1.0/interval*hist.get(index);
+                for(int i=0;i<index;i++){
+                    total += hist.get(i);
+                }
+                //System.out.println("val: "+total/cnt);
+                return total/cnt;
+            case GREATER_THAN:
+                if(val<min){
+                    return 1.0;
+                }
+                if(val>max){
+                    return 0.0;
+                }
+                //System.out.println("GREATER_THAN: "+hist+","+hist.get(index)+","+v);
+                total = (interval-1-getBucketOffset(val))*1.0/interval*hist.get(index);
+                for(int i=index+1;i<buckets;i++){
+                    total += hist.get(i);
+                }
+                //System.out.println("val: "+total/cnt);
+                return total/cnt;
+            case NOT_EQUALS:
+                return 1-estimateSelectivity(Predicate.Op.EQUALS,v);
+            case LESS_THAN_OR_EQ:
+                return 1-estimateSelectivity(Predicate.Op.GREATER_THAN,v);
+            case GREATER_THAN_OR_EQ:
+                return 1-estimateSelectivity(Predicate.Op.LESS_THAN,v);
+        }
+        return 0.0;
+    }
+
+    int getBucketIndex(int v){
+        int index = (v-min+1)/interval-1;
+        if((v-min+1)%interval == 0){
+            return index;
+        }else {
+            return index+1;
+        }
+    }
+
+    int getBucketOffset(int v){
+        int offset = (v-min+1)%interval;
+        if(offset == 0){
+            return interval-1;
+        }else {
+            return offset-1;
+        }
     }
     
     /**
@@ -67,6 +150,6 @@ public class IntHistogram {
      */
     public String toString() {
         // some code goes here
-        return null;
+        return hist.toString();
     }
 }

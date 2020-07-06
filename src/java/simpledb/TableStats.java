@@ -66,6 +66,12 @@ public class TableStats {
      */
     static final int NUM_HIST_BINS = 100;
 
+    int tableid;
+    int ioCostPerPage;
+    Histogram[] hists;
+    TupleDesc tupleDesc;
+    int tupleCnt;
+
     /**
      * Create a new TableStats object, that keeps track of statistics on each
      * column of a table
@@ -85,6 +91,46 @@ public class TableStats {
         // necessarily have to (for example) do everything
         // in a single scan of the table.
         // some code goes here
+        this.tupleCnt = 0;
+        this.tableid = tableid;
+        this.ioCostPerPage = ioCostPerPage;
+        this.tupleDesc = Database.getCatalog().getTupleDesc(tableid);
+        this.hists = new Histogram[tupleDesc.numFields()];
+        for(int i=0;i<hists.length;i++){
+            switch (tupleDesc.getFieldType(i)){
+                case STRING_TYPE:
+                    hists[i] = new StringHistogram(NUM_HIST_BINS);
+                    break;
+                case INT_TYPE:
+                    hists[i] = new IntHistogram(NUM_HIST_BINS,0,32);
+                    break;
+            }
+
+        }
+
+        DbFileIterator iterator = Database.getCatalog().getDatabaseFile(tableid).iterator(new TransactionId());
+        try {
+            iterator.open();
+            while (iterator.hasNext()){
+                Tuple tuple = iterator.next();
+                tupleCnt ++;
+               // System.out.println("tuple: "+tuple);
+                for(int i=0;i<hists.length;i++){
+                    switch (tupleDesc.getFieldType(i)){
+                        case STRING_TYPE:
+                            hists[i].addValue(((StringField)tuple.getField(i)).getValue());
+                            break;
+                        case INT_TYPE:
+                            hists[i].addValue(((IntField)tuple.getField(i)).getValue());
+                            break;
+                    }
+                }
+            }
+        } catch (DbException e) {
+            e.printStackTrace();
+        } catch (TransactionAbortedException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -101,7 +147,7 @@ public class TableStats {
      */
     public double estimateScanCost() {
         // some code goes here
-        return 0;
+        return tupleCnt*ioCostPerPage;
     }
 
     /**
@@ -115,7 +161,7 @@ public class TableStats {
      */
     public int estimateTableCardinality(double selectivityFactor) {
         // some code goes here
-        return 0;
+        return (int) (tupleCnt*selectivityFactor);
     }
 
     /**
@@ -148,7 +194,13 @@ public class TableStats {
      */
     public double estimateSelectivity(int field, Predicate.Op op, Field constant) {
         // some code goes here
-        return 1.0;
+        switch (tupleDesc.getFieldType(field)){
+            case STRING_TYPE:
+                return hists[field].estimateSelectivity(op,((StringField)constant).getValue());
+            case INT_TYPE:
+                return hists[field].estimateSelectivity(op,((IntField)constant).getValue());
+        }
+        return -1;
     }
 
     /**
@@ -156,7 +208,7 @@ public class TableStats {
      * */
     public int totalTuples() {
         // some code goes here
-        return 0;
+        return tupleCnt;
     }
 
 }

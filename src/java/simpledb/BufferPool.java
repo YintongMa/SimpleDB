@@ -272,7 +272,7 @@ public class BufferPool {
         }
         if(pageId != null){
             pageIdToPage.remove(pageId);
-            System.out.println("evictPage pageIdToPage size:"+pageIdToPage.size());
+            //System.out.println("evictPage pageIdToPage size:"+pageIdToPage.size());
         }
 
     }

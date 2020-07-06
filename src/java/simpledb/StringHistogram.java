@@ -4,7 +4,7 @@ package simpledb;
  * A class to represent a fixed-width histogram over a single String-based
  * field.
  */
-public class StringHistogram {
+public class StringHistogram implements Histogram{
     final IntHistogram hist;
 
     /**
@@ -60,8 +60,8 @@ public class StringHistogram {
     }
 
     /** Add a new value to thte histogram */
-    public void addValue(String s) {
-        int val = stringToInt(s);
+    public void addValue(Object s) {
+        int val = stringToInt((String) s);
         hist.addValue(val);
     }
 
@@ -74,8 +74,8 @@ public class StringHistogram {
      * @param s
      *            The string to apply op to
      */
-    public double estimateSelectivity(Predicate.Op op, String s) {
-        int val = stringToInt(s);
+    public double estimateSelectivity(Predicate.Op op, Object s) {
+        int val = stringToInt((String) s);
         return hist.estimateSelectivity(op, val);
     }
 
