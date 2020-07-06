@@ -4,6 +4,7 @@ import java.io.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -32,9 +33,36 @@ public class BufferPool {
     public static final int DEFAULT_PAGES = 50;
 
     public Map<PageId,Page> pageIdToPage;
+    public Map<PageId,PageLock> pageIdToPageLock;
+    public Map<TransactionId, List<PageLock>> tidToPageLocks;
+
+    public ReentrantReadWriteLock tidToPageXLock = new ReentrantReadWriteLock();
+    public ReentrantReadWriteLock pageMapXLock = new ReentrantReadWriteLock();
+
+    class PageLock {
+        ReentrantReadWriteLock reentrantReadWriteLock = new ReentrantReadWriteLock();
+
+        public void lock(Permissions perm) {
+            if (perm == Permissions.READ_ONLY) {
+                reentrantReadWriteLock.readLock().lock();
+            } else {
+                reentrantReadWriteLock.writeLock().lock();
+            }
+        }
+        public void unlock(Permissions perm){
+            if(perm == Permissions.READ_ONLY){
+                reentrantReadWriteLock.readLock().unlock();
+            }else {
+                reentrantReadWriteLock.writeLock().unlock();
+            }
+        }
+    }
+
+
+
 
     //grain granularity lock
-    public ReentrantReadWriteLock poolLock = new ReentrantReadWriteLock();
+    //public ReentrantReadWriteLock poolLock = new ReentrantReadWriteLock();
     int numPages;
 
     /**
@@ -46,6 +74,8 @@ public class BufferPool {
         // some code goes here
         this.numPages = numPages;
         this.pageIdToPage = new ConcurrentHashMap<>();
+        this.pageIdToPageLock = new ConcurrentHashMap<>();
+        this.tidToPageLocks = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {
@@ -80,23 +110,56 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        poolLock.writeLock().lock();
-        Page page;
-        if(pageIdToPage.containsKey(pid)){
-            page = pageIdToPage.get(pid);
+
+        //TODO check contentions here!
+        pageMapXLock.readLock().lock();
+        if(pageIdToPageLock.containsKey(pid)){
+            PageLock pageLock = pageIdToPageLock.get(pid);
+            pageMapXLock.readLock().unlock();
+            pageLock.lock(perm);
+            Page page = pageIdToPage.get(pid);
+            //TODO check contentions here!
+            tidToPageXLock.writeLock().lock();
+            if(tidToPageLocks.containsKey(tid)){
+                tidToPageLocks.get(tid).add(pageLock);
+            }else {
+                List<PageLock> pageLocks = new ArrayList<>();
+                pageLocks.add(pageLock);
+                tidToPageLocks.put(tid,pageLocks);
+            }
+            tidToPageXLock.writeLock().unlock();
+            return page;
+
         }else{
+            pageMapXLock.writeLock().lock();
+            pageMapXLock.readLock().unlock();
+            if(!pageIdToPageLock.containsKey(pid))
             if(pageIdToPage.size() == numPages){
                 evictPage();
                 //throw new DbException("BufferPool is out of space");
             }
+            Page page;
             DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
             page = file.readPage(pid);
             page.markDirty(false,tid);
             //System.out.println("pageIdToPage.put:"+pid+","+page);
             pageIdToPage.put(pid, page);
         }
-        poolLock.writeLock().unlock();
-        return page;
+//        Page page;
+//        if(pageIdToPage.containsKey(pid)){
+//            page = pageIdToPage.get(pid);
+//        }else{
+//            if(pageIdToPage.size() == numPages){
+//                evictPage();
+//                //throw new DbException("BufferPool is out of space");
+//            }
+//            DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+//            page = file.readPage(pid);
+//            page.markDirty(false,tid);
+//            //System.out.println("pageIdToPage.put:"+pid+","+page);
+//            pageIdToPage.put(pid, page);
+//        }
+        return null;
     }
 
     /**
