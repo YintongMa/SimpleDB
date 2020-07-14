@@ -81,21 +81,23 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        LockManager.PageLock pageLock = lockManager.acquireLock(tid,pid,perm);
+//        System.out.println("getPage "+pid);
+        lockManager.acquireLock(tid,pid,perm);
 
         Page page;
+        //System.out.println("getPage pageIdToPage:"+pid+","+pageIdToPage);
         if(pageIdToPage.containsKey(pid)){
             page = pageIdToPage.get(pid);
-            if(pageLock.perm.equals(Permissions.READ_WRITE)){
+            if(perm.equals(Permissions.READ_WRITE)){
                 page.setBeforeImage();
             }
             return page;
         }else{
             if(pageIdToPage.size() == numPages){
-
-                lockManager.xlock.lock();
+                //System.out.println("evictPage "+pid);
+                //lockManager.xlock.lock();
                 evictPage();
-                lockManager.xlock.unlock();
+                //lockManager.xlock.unlock();
                 //throw new DbException("BufferPool is out of space");
             }
             DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
@@ -103,7 +105,7 @@ public class BufferPool {
             page.markDirty(false,tid);
             //System.out.println("pageIdToPage.put:"+pid+","+page);
             pageIdToPage.put(pid, page);
-            if(pageLock.perm.equals(Permissions.READ_WRITE)){
+            if(perm.equals(Permissions.READ_WRITE)){
                 page.setBeforeImage();
             }
             return page;
@@ -133,9 +135,14 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
-        flushPages(tid);
+
         lockManager.xlock.lock();
+//        flushPages(tid);
         Set<LockManager.PageLock> pageLocks = lockManager.tidToPageLocks.get(tid);
+        if(pageLocks == null){
+            lockManager.xlock.unlock();
+            return;
+        }
         for(LockManager.PageLock pageLock : pageLocks){
             pageLock.unlock();
             lockManager.pageLockToTids.get(pageLock).remove(tid);
@@ -166,6 +173,7 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         if(commit){
+            flushPages(tid);
             transactionComplete(tid);
         }else {
             lockManager.xlock.lock();
@@ -205,14 +213,26 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+//        System.out.println("insertTuple :"+t);
         ArrayList<Page> modifiedPages = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid,t);
         for(Page page:modifiedPages){
-            if(pageIdToPage.size() == numPages){
-                throw new DbException("BufferPool is out of space");
-            }else {
-                //System.out.println("bufferpool insertTuple :"+page.getId()+","+pageIdToPage.size());
+            if(pageIdToPage.containsKey(page.getId())){
                 pageIdToPage.put(page.getId(),page);
+                //System.out.println("insertTuple :"+t+"???"+page.getId()+","+page.isDirty());
+            }else{
+                if(pageIdToPage.size() == numPages){
+                    lockManager.xlock.lock();
+                    evictPage();
+                    lockManager.xlock.unlock();
+                    if(pageIdToPage.size() == numPages){
+                        throw new DbException("BufferPool is out of space");
+                    }
+
+                }
+                pageIdToPage.put(page.getId(),page);
+               // System.out.println("insertTuple :"+t+"!!!");
             }
+
         }
     }
 
@@ -300,26 +320,31 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         //TODO LRU or some cache strategy
+//        System.out.println("evictPage pageIdToPage before:"+pageIdToPage);
+        lockManager.xlock.lock();
         PageId pageId = null;
         for(Map.Entry<PageId,Page> entry : pageIdToPage.entrySet()){
             //System.out.println("evictPage pageIdToPage isDirty:"+entry.getValue().isDirty());
             pageId = entry.getKey();
-            if(!lockManager.holdsPotentialLock(pageId) && entry.getValue().isDirty() != null){
-                //System.out.println("evictPage pageIdToPage isDirty:"+entry);
-                try {
-                    flushPage(pageId);
-                    break;
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }else {
-                break;
+
+            boolean holdSlock = lockManager.holdsLock(pageId,Permissions.READ_ONLY);
+            boolean holdXlock = lockManager.holdsLock(pageId,Permissions.READ_WRITE);
+            if(holdSlock || !holdXlock) {
+//                if (entry.getValue().isDirty() != null) {
+//                    //System.out.println("evictPage pageIdToPage isDirty:"+entry);
+//                    try {
+//                        flushPage(pageId);
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+                pageIdToPage.remove(pageId);
+                lockManager.xlock.unlock();
+                return;
             }
         }
-        if(pageId != null){
-            pageIdToPage.remove(pageId);
-            //System.out.println("evictPage pageIdToPage size:"+pageIdToPage.size());
-        }
+        throw new DbException("BufferPool is out of space");
+
 
     }
 

@@ -280,6 +280,7 @@ public class HeapPage implements Page {
                     markSlotUsed(i,true);
                     tuples[i] = t;
                     t.setRecordId(new RecordId(pid,i));
+                    iterator();
                     return;
                 }
             }

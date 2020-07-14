@@ -16,7 +16,6 @@ public class AbortEvictionTest extends SimpleDbTestBase {
         // Allocate a file with ~10 pages of data
         HeapFile f = SystemTestUtil.createRandomHeapFile(2, 512*10, null, null);
         Database.resetBufferPool(2);
-
         // BEGIN TRANSACTION
         Transaction t = new Transaction();
         t.start();

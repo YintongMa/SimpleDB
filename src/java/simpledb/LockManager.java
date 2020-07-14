@@ -2,6 +2,7 @@ package simpledb;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.*;
 
 public class LockManager {
@@ -16,7 +17,7 @@ public class LockManager {
 
 
 
-    Lock xlock = new ReentrantReadWriteLock().writeLock();
+    Lock xlock = new StampedLock().asReadWriteLock().writeLock();
 
     class PageLock {
 
@@ -70,7 +71,7 @@ public class LockManager {
         }
     }
 
-    public PageLock acquireLock(TransactionId tid, PageId pid,Permissions perm){
+    public void acquireLock(TransactionId tid, PageId pid,Permissions perm) throws TransactionAbortedException {
         xlock.lock();
 //        System.out.println("pageIdToLock size: "+pageIdToLock.size());
 //        System.out.println("pageIdToLock content: "+pageIdToLock);
@@ -144,7 +145,7 @@ public class LockManager {
 
             pageLock.lock();
             xlock.unlock();
-            return pageLock;
+            return;
 
         }else {
             //w -> w/r
@@ -155,7 +156,7 @@ public class LockManager {
             {
 //                System.out.println("here: ");
                 xlock.unlock();
-                return pageIdToXLock.get(pid);
+                return;
             }
 
 
@@ -172,7 +173,21 @@ public class LockManager {
 
         xlock.unlock();
 
-        pageLock.lock();
+        //pageLock.lock();
+        try {
+            if(!pageLock.lock.tryLock(1, TimeUnit.SECONDS)){
+                xlock.lock();
+                pageLockToExpectedTid.get(pageLock).remove(tid);
+                if(pageLockToExpectedTid.get(pageLock).size() == 0){
+                    pageLockToExpectedTid.remove(pageLock);
+                }
+                xlock.unlock();
+                throw new TransactionAbortedException();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
 
         xlock.lock();
 
@@ -207,7 +222,7 @@ public class LockManager {
         }
 
         xlock.unlock();
-        return pageLock;
+        return;
     }
 
     public void releaseLock(TransactionId tid, PageId pid){
@@ -217,6 +232,32 @@ public class LockManager {
         Set<PageLock> newPageLocks = new HashSet<>();
         for(PageLock pageLock : pageLocks){
             if(pageLock.pageId.equals(pid)){
+                pageLock.unlock();
+//                pageLocks.remove(pageLock);
+                pageLockToTids.get(pageLock).remove(tid);
+                if(pageLockToTids.get(pageLock).size() == 0){
+                    pageLockToTids.remove(pageLock);
+                }
+            }else {
+                newPageLocks.add(pageLock);
+            }
+        }
+
+        if(newPageLocks.size() == 0){
+            tidToPageLocks.remove(tid);
+        }else {
+            tidToPageLocks.put(tid, newPageLocks);
+        }
+        xlock.unlock();
+    }
+
+    public void releaseLock(TransactionId tid, PageId pid, Permissions perm){
+        xlock.lock();
+
+        Set<PageLock> pageLocks = tidToPageLocks.get(tid);
+        Set<PageLock> newPageLocks = new HashSet<>();
+        for(PageLock pageLock : pageLocks){
+            if(pageLock.pageId.equals(pid) && pageLock.perm.equals(perm)){
                 pageLock.unlock();
 //                pageLocks.remove(pageLock);
                 pageLockToTids.get(pageLock).remove(tid);
@@ -287,5 +328,13 @@ public class LockManager {
 
        // xlock.unlock();
         return flag;
+    }
+
+    public boolean holdsLock(PageId pid, Permissions perm) {
+
+        PageLock pageLock = new PageLock(pid,perm);
+
+        return pageLockToTids.containsKey(pageLock) && !pageLockToTids.get(pageLock).isEmpty();
+
     }
 }

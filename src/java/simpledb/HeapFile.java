@@ -127,17 +127,25 @@ public class HeapFile implements DbFile {
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
+        //System.out.println("insertTuple:"+tid+","+t);
         ArrayList<Page> modifiedPages = new ArrayList<>();
         //System.out.println("insertTuple: "+numPages()+","+t.getRecordId().getPageId().getPageNumber()+","+f.length());
         for(int i=0;i<numPages();i++){
-            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),i),Permissions.READ_WRITE);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),i),Permissions.READ_ONLY);
+
+//            LockManager lockManager = Database.getBufferPool().lockManager;
+//            lockManager.xlock.lock();
+            //TODO improve performance!
             if(page.getNumEmptySlots()!=0){
+                page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),i),Permissions.READ_WRITE);
+                //System.out.println("page.getNumEmptySlots()!=0 insertTuple");
                 page.insertTuple(t);
                 page.markDirty(true,tid);
                 modifiedPages.add(page);
                 return modifiedPages;
             }
-            //Database.getBufferPool().releasePage(tid,new HeapPageId(getId(),i));
+            Database.getBufferPool().lockManager.releaseLock(tid,page.pid,Permissions.READ_ONLY);
+            //System.out.println("releaseLock: "+page.isDirty());
 
         }
 
@@ -145,6 +153,7 @@ public class HeapFile implements DbFile {
         writePage(new HeapPage(pageId,new byte[BufferPool.getPageSize()]));
         HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,pageId,Permissions.READ_WRITE);
         page.insertTuple(t);
+        //System.out.println("writePage insertTuple");
         page.markDirty(true,tid);
         modifiedPages.add(page);
 
