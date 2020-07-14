@@ -70,7 +70,7 @@ public class LockManager {
         }
     }
 
-    public void acquireLock(TransactionId tid, PageId pid,Permissions perm){
+    public PageLock acquireLock(TransactionId tid, PageId pid,Permissions perm){
         xlock.lock();
 //        System.out.println("pageIdToLock size: "+pageIdToLock.size());
 //        System.out.println("pageIdToLock content: "+pageIdToLock);
@@ -144,7 +144,7 @@ public class LockManager {
 
             pageLock.lock();
             xlock.unlock();
-            return;
+            return pageLock;
 
         }else {
             //w -> w/r
@@ -155,7 +155,7 @@ public class LockManager {
             {
 //                System.out.println("here: ");
                 xlock.unlock();
-                return;
+                return pageIdToXLock.get(pid);
             }
 
 
@@ -207,6 +207,7 @@ public class LockManager {
         }
 
         xlock.unlock();
+        return pageLock;
     }
 
     public void releaseLock(TransactionId tid, PageId pid){

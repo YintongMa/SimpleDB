@@ -2,10 +2,7 @@ package simpledb;
 
 import java.io.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -84,9 +81,15 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        lockManager.acquireLock(tid,pid,perm);
+        LockManager.PageLock pageLock = lockManager.acquireLock(tid,pid,perm);
+
+        Page page;
         if(pageIdToPage.containsKey(pid)){
-            return pageIdToPage.get(pid);
+            page = pageIdToPage.get(pid);
+            if(pageLock.perm.equals(Permissions.READ_WRITE)){
+                page.setBeforeImage();
+            }
+            return page;
         }else{
             if(pageIdToPage.size() == numPages){
 
@@ -95,12 +98,14 @@ public class BufferPool {
                 lockManager.xlock.unlock();
                 //throw new DbException("BufferPool is out of space");
             }
-            Page page;
             DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
             page = file.readPage(pid);
             page.markDirty(false,tid);
             //System.out.println("pageIdToPage.put:"+pid+","+page);
             pageIdToPage.put(pid, page);
+            if(pageLock.perm.equals(Permissions.READ_WRITE)){
+                page.setBeforeImage();
+            }
             return page;
         }
     }
@@ -128,6 +133,18 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        flushPages(tid);
+        lockManager.xlock.lock();
+        Set<LockManager.PageLock> pageLocks = lockManager.tidToPageLocks.get(tid);
+        for(LockManager.PageLock pageLock : pageLocks){
+            pageLock.unlock();
+            lockManager.pageLockToTids.get(pageLock).remove(tid);
+            if(lockManager.pageLockToTids.get(pageLock).size() == 0){
+                lockManager.pageLockToTids.remove(pageLock);
+            }
+        }
+        lockManager.tidToPageLocks.remove(tid);
+        lockManager.xlock.unlock();
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
@@ -148,6 +165,25 @@ public class BufferPool {
         throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        if(commit){
+            transactionComplete(tid);
+        }else {
+            lockManager.xlock.lock();
+            Set<LockManager.PageLock> pageLocks = lockManager.tidToPageLocks.get(tid);
+            for(LockManager.PageLock pageLock : pageLocks){
+                if(pageLock.perm.equals(Permissions.READ_WRITE)){
+                    Page page = pageIdToPage.get(pageLock.pageId).getBeforeImage();
+                    pageIdToPage.put(pageLock.pageId,page);
+                }
+                pageLock.unlock();
+                lockManager.pageLockToTids.get(pageLock).remove(tid);
+                if(lockManager.pageLockToTids.get(pageLock).size() == 0){
+                    lockManager.pageLockToTids.remove(pageLock);
+                }
+            }
+            lockManager.tidToPageLocks.remove(tid);
+            lockManager.xlock.unlock();
+        }
     }
 
     /**
