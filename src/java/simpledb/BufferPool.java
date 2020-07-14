@@ -32,34 +32,9 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
-    public Map<PageId,Page> pageIdToPage;
-    public Map<PageId,PageLock> pageIdToPageLock;
-    public Map<TransactionId, List<PageLock>> tidToPageLocks;
+    LockManager lockManager;
 
-    public ReentrantReadWriteLock tidToPageXLock = new ReentrantReadWriteLock();
-    public ReentrantReadWriteLock pageMapXLock = new ReentrantReadWriteLock();
-
-    class PageLock {
-        ReentrantReadWriteLock reentrantReadWriteLock = new ReentrantReadWriteLock();
-
-        public void lock(Permissions perm) {
-            if (perm == Permissions.READ_ONLY) {
-                reentrantReadWriteLock.readLock().lock();
-            } else {
-                reentrantReadWriteLock.writeLock().lock();
-            }
-        }
-        public void unlock(Permissions perm){
-            if(perm == Permissions.READ_ONLY){
-                reentrantReadWriteLock.readLock().unlock();
-            }else {
-                reentrantReadWriteLock.writeLock().unlock();
-            }
-        }
-    }
-
-
-
+    Map<PageId,Page> pageIdToPage;
 
     //grain granularity lock
     //public ReentrantReadWriteLock poolLock = new ReentrantReadWriteLock();
@@ -73,9 +48,8 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
+        this.lockManager = new LockManager();
         this.pageIdToPage = new ConcurrentHashMap<>();
-        this.pageIdToPageLock = new ConcurrentHashMap<>();
-        this.tidToPageLocks = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {
@@ -110,32 +84,15 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-
-        //TODO check contentions here!
-        pageMapXLock.readLock().lock();
-        if(pageIdToPageLock.containsKey(pid)){
-            PageLock pageLock = pageIdToPageLock.get(pid);
-            pageMapXLock.readLock().unlock();
-            pageLock.lock(perm);
-            Page page = pageIdToPage.get(pid);
-            //TODO check contentions here!
-            tidToPageXLock.writeLock().lock();
-            if(tidToPageLocks.containsKey(tid)){
-                tidToPageLocks.get(tid).add(pageLock);
-            }else {
-                List<PageLock> pageLocks = new ArrayList<>();
-                pageLocks.add(pageLock);
-                tidToPageLocks.put(tid,pageLocks);
-            }
-            tidToPageXLock.writeLock().unlock();
-            return page;
-
+        lockManager.acquireLock(tid,pid,perm);
+        if(pageIdToPage.containsKey(pid)){
+            return pageIdToPage.get(pid);
         }else{
-            pageMapXLock.writeLock().lock();
-            pageMapXLock.readLock().unlock();
-            if(!pageIdToPageLock.containsKey(pid))
             if(pageIdToPage.size() == numPages){
+
+                lockManager.xlock.lock();
                 evictPage();
+                lockManager.xlock.unlock();
                 //throw new DbException("BufferPool is out of space");
             }
             Page page;
@@ -144,22 +101,8 @@ public class BufferPool {
             page.markDirty(false,tid);
             //System.out.println("pageIdToPage.put:"+pid+","+page);
             pageIdToPage.put(pid, page);
+            return page;
         }
-//        Page page;
-//        if(pageIdToPage.containsKey(pid)){
-//            page = pageIdToPage.get(pid);
-//        }else{
-//            if(pageIdToPage.size() == numPages){
-//                evictPage();
-//                //throw new DbException("BufferPool is out of space");
-//            }
-//            DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
-//            page = file.readPage(pid);
-//            page.markDirty(false,tid);
-//            //System.out.println("pageIdToPage.put:"+pid+","+page);
-//            pageIdToPage.put(pid, page);
-//        }
-        return null;
     }
 
     /**
@@ -174,6 +117,7 @@ public class BufferPool {
     public  void releasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+        lockManager.releaseLock(tid,pid);
     }
 
     /**
@@ -190,7 +134,7 @@ public class BufferPool {
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return lockManager.holdsLock(tid,p);
     }
 
     /**
@@ -266,6 +210,9 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
+        for(PageId pageId : pageIdToPage.keySet()){
+            flushPage(pageId);
+        }
 
     }
 
@@ -321,7 +268,7 @@ public class BufferPool {
         for(Map.Entry<PageId,Page> entry : pageIdToPage.entrySet()){
             //System.out.println("evictPage pageIdToPage isDirty:"+entry.getValue().isDirty());
             pageId = entry.getKey();
-            if(entry.getValue().isDirty() != null){
+            if(!lockManager.holdsPotentialLock(pageId) && entry.getValue().isDirty() != null){
                 //System.out.println("evictPage pageIdToPage isDirty:"+entry);
                 try {
                     flushPage(pageId);

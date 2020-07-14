@@ -388,6 +388,7 @@ public class TestUtil {
 
         protected void setUp() throws Exception {
             try{
+//                System.out.println("????###");
             	Database.reset();
                 empty = Utility.createEmptyHeapFile(emptyFile.getAbsolutePath(), 2);
             } catch (IOException e) {

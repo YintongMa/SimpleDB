@@ -21,7 +21,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
    */
   @Before public void setUp() throws Exception {
     super.setUp();
-
+    //System.out.println("$$$$");
     // clear all state from the buffer pool
     bp = Database.resetBufferPool(BufferPool.DEFAULT_PAGES);
 
@@ -32,6 +32,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
       empty.insertTuple(tid, Utility.getHeapTuple(i, 2));
     }
 
+    //System.out.println("setup insert complete:"+bp.lockManager.pageIdToLock);
     // if this fails, complain to the TA
     assertEquals(3, empty.numPages());
 
@@ -68,6 +69,7 @@ public class LockingTest extends TestUtil.CreateHeapFile {
       boolean expected) throws Exception {
 
     bp.getPage(tid1, pid1, perm1);
+    //System.out.println(bp.lockManager.pageLockToTids);
     grabLock(tid2, pid2, perm2, expected);
   }
 

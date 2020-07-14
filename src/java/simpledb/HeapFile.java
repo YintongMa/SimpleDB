@@ -130,19 +130,20 @@ public class HeapFile implements DbFile {
         ArrayList<Page> modifiedPages = new ArrayList<>();
         //System.out.println("insertTuple: "+numPages()+","+t.getRecordId().getPageId().getPageNumber()+","+f.length());
         for(int i=0;i<numPages();i++){
-            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),i),null);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),i),Permissions.READ_WRITE);
             if(page.getNumEmptySlots()!=0){
                 page.insertTuple(t);
                 page.markDirty(true,tid);
                 modifiedPages.add(page);
                 return modifiedPages;
             }
+            //Database.getBufferPool().releasePage(tid,new HeapPageId(getId(),i));
 
         }
 
         HeapPageId pageId = new HeapPageId(getId(),numPages());
         writePage(new HeapPage(pageId,new byte[BufferPool.getPageSize()]));
-        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,pageId,null);
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,pageId,Permissions.READ_WRITE);
         page.insertTuple(t);
         page.markDirty(true,tid);
         modifiedPages.add(page);
@@ -155,7 +156,7 @@ public class HeapFile implements DbFile {
             TransactionAbortedException {
         // some code goes here
         ArrayList<Page> modifiedPages = new ArrayList<>();
-        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),t.getRecordId().getPageId().getPageNumber()),null);
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid,new HeapPageId(getId(),t.getRecordId().getPageId().getPageNumber()),Permissions.READ_WRITE);
         page.deleteTuple(t);
         page.markDirty(true,tid);
         modifiedPages.add(page);
@@ -222,7 +223,7 @@ public class HeapFile implements DbFile {
             }
             //System.out.println("hasNext :"+"??"+nextPgNo+","+numPages());
             while (nextPgNo < numPages()){
-                heapPage = (HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(tableId,nextPgNo), null);
+                heapPage = (HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(tableId,nextPgNo), Permissions.READ_ONLY);
                 tupleIterator = heapPage.iterator();
                 if(tupleIterator.hasNext()){
                     hasNext = true;
